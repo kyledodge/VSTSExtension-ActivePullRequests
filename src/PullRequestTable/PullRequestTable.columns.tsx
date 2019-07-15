@@ -13,6 +13,12 @@ import { ObservableValue } from "azure-devops-ui/Core/Observable";
 import { getVoteStatus, getCommentStatus } from "./PullRequestTable.helpers";
 import * as styles from "./PullRequestTable.columns.scss";
 
+import { CommonServiceIds, IExtensionDataManager, IExtensionDataService } from "azure-devops-extension-api";
+import { Toggle } from "azure-devops-ui/Toggle";
+import { Button } from "azure-devops-ui/Button";
+import { TextField } from "azure-devops-ui/TextField";
+import * as SDK from "azure-devops-extension-sdk";
+
 function summonPersona(identityRef: IdentityRef): IIdentityDetailsProvider {
   return {
     getDisplayName() {
@@ -24,7 +30,9 @@ function summonPersona(identityRef: IdentityRef): IIdentityDetailsProvider {
   };
 }
 
-export function getColumnTemplate(hostUri: string): ITableColumn<PullRequestTableItem>[] {
+
+
+export function getColumnTemplate(hostUri: string, data: boolean): ITableColumn<PullRequestTableItem>[] {
   const renderAuthorColumn = (rowIndex: number, columnIndex: number, tableColumn: ITableColumn<PullRequestTableItem>, tableItem: PullRequestTableItem) => {
     return (
       <SimpleTableCell
@@ -198,90 +206,105 @@ export function getColumnTemplate(hostUri: string): ITableColumn<PullRequestTabl
     );
   };
 
-  let columns = [
-    {
-      columnLayout: TableColumnLayout.singleLinePrefix,
-      id: "author",
-      name: "Author",
-      readonly: true,
-      renderCell: renderAuthorColumn,
-      onSize: onSize,
-      width: new ObservableValue(-25),
-      minWidth: 56
-    },
-    {
-      columnLayout: TableColumnLayout.singleLinePrefix,
-      id: "creationDate",
-      name: "Created",
-      readonly: true,
-      renderCell: renderCreationDateColumn,
-      onSize: onSize,
-      width: new ObservableValue(130),
-      minWidth: 130
-    },
-    {
-      columnLayout: TableColumnLayout.twoLine,
-      id: "details",
-      name: "Details",
-      readonly: true,
-      renderCell: renderDetailsColumn,
-      onSize: onSize,
-      width: new ObservableValue(-50),
-      minWidth: 150
-    },
-    {
-      id: "repository",
-      name: "Repository",
-      readonly: true,
-      renderCell: renderRepositoryColumn,
-      onSize: onSize,
-      width: new ObservableValue(-25),
-      minWidth: 75
-    },
-    {
-      columnLayout: TableColumnLayout.singleLinePrefix,
-      id: "comment-status",
-      name: "Comments",
-      readonly: true,
-      renderCell: renderCommentStatusColumn,
-      onSize: onSize,
-      width: new ObservableValue(100),
-      minWidth: 100
-    },
-    {
-      columnLayout: TableColumnLayout.singleLinePrefix,
-      id: "build-status",
-      name: "Build Status",
-      readonly: true,
-      renderCell: renderBuildStatusColumn,
-      onSize: onSize,
-      width: new ObservableValue(-25),
-      minWidth: 150
-    },
-    {
-      columnLayout: TableColumnLayout.singleLinePrefix,
-      id: "my-vote",
-      name: "My Vote",
-      readonly: true,
-      renderCell: renderMyVoteColumn,
-      onSize: onSize,
-      width: new ObservableValue(-25),
-      minWidth: 150
-    },
-    {
-      columnLayout: TableColumnLayout.none,
-      id: "reviewers",
-      name: "Reviewers",
-      readonly: true,
-      renderCell: renderReviewersColumn,
-      width: new ObservableValue(-33),
-      minWidth: 150
-    }
-  ];
 
-  function onSize(event: MouseEvent, index: number, width: number) {
-    (columns[index].width as ObservableValue<number>).value = width;
-  }
+  console.log('show column: ' + data)
+ 
+            let columns = [];
 
-  return columns;
+            
+              columns.push({
+                columnLayout: TableColumnLayout.singleLinePrefix,
+                id: "author",
+                name: "Author",
+                readonly: true,
+                renderCell: renderAuthorColumn,
+                onSize: onSize,
+                width: new ObservableValue(-25),
+                minWidth: 56
+              });
+
+            columns.push({
+              columnLayout: TableColumnLayout.singleLinePrefix,
+              id: "creationDate",
+              name: "Created",
+              readonly: true,
+              renderCell: renderCreationDateColumn,
+              onSize: onSize,
+              width: new ObservableValue(130),
+              minWidth: 130
+            },
+            {
+              columnLayout: TableColumnLayout.twoLine,
+              id: "details",
+              name: "Details",
+              readonly: true,
+              renderCell: renderDetailsColumn,
+              onSize: onSize,
+              width: new ObservableValue(-50),
+              minWidth: 150
+            },
+            {
+              id: "repository",
+              name: "Repository",
+              readonly: true,
+              renderCell: renderRepositoryColumn,
+              onSize: onSize,
+              width: new ObservableValue(-25),
+              minWidth: 75
+            },
+            {
+              columnLayout: TableColumnLayout.singleLinePrefix,
+              id: "comment-status",
+              name: "Comments",
+              readonly: true,
+              renderCell: renderCommentStatusColumn,
+              onSize: onSize,
+              width: new ObservableValue(100),
+              minWidth: 100
+            },
+            {
+              columnLayout: TableColumnLayout.singleLinePrefix,
+              id: "build-status",
+              name: "Build Status",
+              readonly: true,
+              renderCell: renderBuildStatusColumn,
+              onSize: onSize,
+              width: new ObservableValue(-25),
+              minWidth: 150
+            });
+
+            if (data) {
+              columns.push(
+                {
+                  columnLayout: TableColumnLayout.singleLinePrefix,
+                  id: "my-vote",
+                  name: "My Vote",
+                  readonly: true,
+                  renderCell: renderMyVoteColumn,
+                  onSize: onSize,
+                  width: new ObservableValue(-25),
+                  minWidth: 150
+                }
+              );
+            }
+
+            columns.push(
+            {
+              columnLayout: TableColumnLayout.none,
+              id: "reviewers",
+              name: "Reviewers",
+              readonly: true,
+              renderCell: renderReviewersColumn,
+              width: new ObservableValue(-33),
+              minWidth: 150
+            });
+
+            function onSize(event: MouseEvent, index: number, width: number) {
+              (columns[index].width as ObservableValue<number>).value = width;
+            }
+          
+            return columns;
+
+
+  
 }

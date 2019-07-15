@@ -22,14 +22,24 @@ import { PullRequestTable } from "./PullRequestTable/PullRequestTable";
 import { getStatusFromBuild, getVoteStatus } from "./PullRequestTable/PullRequestTable.helpers";
 import { DropdownMultiSelection } from "azure-devops-ui/Utilities/DropdownSelection";
 import { PullRequestTableItem } from "./PullRequestTable/PullRequestTable.models";
+import { SettingsTab } from "./SettingsTable/SettingsTab";
+import { SettingsTableItem } from "./SettingsTable/SettingsTable.models";
+import SettingsPanel from "./Settings/SettingsPanel";
 
 enum TabType {
   active = "active",
-  drafts = "drafts"
+  drafts = "drafts",
+  settings = "settings"
 }
+
+const settings: SettingsTableItem[] = [
+  { id: 1, isActive: true, columnName: "Column 1" },
+  { id: 2, isActive: false, columnName: "Column 2"}
+]
 
 export class App extends React.Component<{}, AppState> {
   private showFilter = new ObservableValue<boolean>(false);
+  private showSettings = new ObservableValue<boolean>(false);
   private gitClient: GitRestClient;
   private buildClient: BuildRestClient;
   private userContext: IUserContext;
@@ -51,7 +61,7 @@ export class App extends React.Component<{}, AppState> {
     this.gitClient = API.getClient(GitRestClient);
     this.buildClient = API.getClient(BuildRestClient);
     this.filter = new Filter();
-    this.state = { filter: {}, repositories: [], pullRequests: undefined, hostUrl: undefined, selectedTabId: TabType.active, activePrBadge: undefined, draftPrBadge: undefined };
+    this.state = { showSettings: false, filter: {}, repositories: [], pullRequests: undefined, hostUrl: undefined, selectedTabId: TabType.active, activePrBadge: undefined, draftPrBadge: undefined };
     this.filter.subscribe(() => this.setState({ filter: this.filter.getState() }), FILTER_CHANGE_EVENT);
   }
 
@@ -86,6 +96,9 @@ export class App extends React.Component<{}, AppState> {
                 placeholder="Repositories" />
             </FilterBar>
           </div>
+        </ConditionalChildren>
+        <ConditionalChildren renderChildren={this.state.showSettings}>
+          <SettingsPanel />
         </ConditionalChildren>
         {this.renderTabContents()}
       </Page>
@@ -155,7 +168,21 @@ export class App extends React.Component<{}, AppState> {
   }
 
   private renderTabBarCommands = () => {
-    return <HeaderCommandBarWithFilter filter={this.filter} filterToggled={this.showFilter} items={[]} />;
+    return <HeaderCommandBarWithFilter  filter={this.filter} filterToggled={this.showFilter} items={[
+      {
+        subtle: true,
+        id: "settings",
+
+        onActivate: () => {
+            this.setState({ showSettings: !this.state.showSettings});
+        },
+        tooltipProps: { text: "Extension Settings" },
+        disabled: false,
+        iconProps: {
+            iconName: "Settings"
+        }
+    },
+    ]} />;
   }
 
   private onSelectedTabChanged = (newTabId: string) => {
@@ -174,6 +201,10 @@ export class App extends React.Component<{}, AppState> {
         <PullRequestTable pullRequests={
           this.state.pullRequests ? this.state.pullRequests.filter(x => x.isDraft && x.author.id === this.userContext.id) : undefined
         } hostUrl={this.state.hostUrl} filter={this.state.filter} />
+      </section>;
+    } else if (this.state.selectedTabId === TabType.settings) {
+      return <section className="page-content page-content-top">
+        <SettingsTab />
       </section>;
     }
     return <div></div>;

@@ -6,6 +6,11 @@ import * as React from "react";
 import * as zeroImage from "./../../static/images/pullRequest.png";
 import { getColumnTemplate as getColumns } from "./PullRequestTable.columns";
 import { PullRequestTableItem, PullRequestTableProps, PullRequestTableState } from "./PullRequestTable.models";
+import { CommonServiceIds, IExtensionDataManager, IExtensionDataService } from "azure-devops-extension-api";
+import { Toggle } from "azure-devops-ui/Toggle";
+import { Button } from "azure-devops-ui/Button";
+import { TextField } from "azure-devops-ui/TextField";
+import * as SDK from "azure-devops-extension-sdk";
 
 function areArraysEqual(arr1: any[], arr2: any[]): boolean {
   if (arr1 == null || arr2 == null) { return false; }
@@ -17,20 +22,43 @@ function areArraysEqual(arr1: any[], arr2: any[]): boolean {
 }
 
 export class PullRequestTable extends React.Component<PullRequestTableProps, PullRequestTableState> {
+  private _dataManager?: IExtensionDataManager;
+private showColumn: boolean = true;
+
   constructor(props: PullRequestTableProps) {
     super(props);
+    console.log('show column: ' + this.showColumn)
+    this.initializeState();
+    console.log('show column: ' + this.showColumn)
     this.state = {
-      columns: getColumns(this.props.hostUrl),
+      columns: getColumns(this.props.hostUrl, this.showColumn),
       filteredPrs: [],
       pullRequestProvider: new ObservableArray<ObservableValue<PullRequestTableItem>>(
         this.filterItems(this.props.pullRequests) || new Array(5).fill(new ObservableValue<PullRequestTableItem>(undefined))
       )
     };
+
+    this.initializeState();
   }
+
+  componentDidMount() {
+    this.initializeState();
+  }
+
+  private async initializeState(): Promise<void> {
+    await SDK.ready();
+    const accessToken = await SDK.getAccessToken();
+    const extDataService = await SDK.getService<IExtensionDataService>(CommonServiceIds.ExtensionDataService);
+    this._dataManager = await extDataService.getExtensionDataManager(SDK.getExtensionContext().id, accessToken);
+
+    await this._dataManager.getValue<string>("pullrequests-column-status").then((data) => {
+        this.showColumn = data === "true" ? true : false;
+    });
+}
 
   componentDidUpdate(prevProps: PullRequestTableProps, prevState: PullRequestTableState) {
     if (prevProps.hostUrl == null && this.props.hostUrl != null) {
-      this.setState({ columns: getColumns(this.props.hostUrl) });
+      this.setState({ columns: getColumns(this.props.hostUrl, this.showColumn) });
     }
     if (!areArraysEqual(prevProps.pullRequests, this.props.pullRequests) || prevProps.filter !== this.props.filter) {
       this.setState({

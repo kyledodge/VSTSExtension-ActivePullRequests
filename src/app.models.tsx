@@ -10,4 +10,5 @@ export interface AppState {
   activePrBadge: number;
   draftPrBadge: number;
   filter: IFilterState;
+  showSettings: boolean;
 }
