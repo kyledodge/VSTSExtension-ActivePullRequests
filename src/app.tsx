@@ -1,5 +1,5 @@
 import * as API from "azure-devops-extension-api";
-import { CommonServiceIds, IProjectPageService } from "azure-devops-extension-api";
+import { CommonServiceIds, IProjectPageService, IExtensionDataManager, IExtensionDataService } from "azure-devops-extension-api";
 import { BuildReason, BuildRestClient } from "azure-devops-extension-api/Build";
 import { GitRestClient, PullRequestStatus } from "azure-devops-extension-api/Git";
 import * as SDK from "azure-devops-extension-sdk";
@@ -22,24 +22,19 @@ import { PullRequestTable } from "./PullRequestTable/PullRequestTable";
 import { getStatusFromBuild, getVoteStatus } from "./PullRequestTable/PullRequestTable.helpers";
 import { DropdownMultiSelection } from "azure-devops-ui/Utilities/DropdownSelection";
 import { PullRequestTableItem } from "./PullRequestTable/PullRequestTable.models";
-import { SettingsTab } from "./SettingsTable/SettingsTab";
-import { SettingsTableItem } from "./SettingsTable/SettingsTable.models";
-import SettingsPanel from "./Settings/SettingsPanel";
+import SettingsPanel from "./SettingsPanel/SettingsPanel";
+import { Settings } from "./SettingsPanel/SettingsPanel.models";
 
 enum TabType {
   active = "active",
-  drafts = "drafts",
-  settings = "settings"
+  drafts = "drafts"
 }
-
-const settings: SettingsTableItem[] = [
-  { id: 1, isActive: true, columnName: "Column 1" },
-  { id: 2, isActive: false, columnName: "Column 2"}
-]
 
 export class App extends React.Component<{}, AppState> {
   private showFilter = new ObservableValue<boolean>(false);
-  private showSettings = new ObservableValue<boolean>(false);
+  private projectName: string;
+  private isReady: boolean = false;
+  private dataManager: IExtensionDataManager;
   private gitClient: GitRestClient;
   private buildClient: BuildRestClient;
   private userContext: IUserContext;
@@ -61,12 +56,16 @@ export class App extends React.Component<{}, AppState> {
     this.gitClient = API.getClient(GitRestClient);
     this.buildClient = API.getClient(BuildRestClient);
     this.filter = new Filter();
-    this.state = { showSettings: false, filter: {}, repositories: [], pullRequests: undefined, hostUrl: undefined, selectedTabId: TabType.active, activePrBadge: undefined, draftPrBadge: undefined };
+    this.state = { showSettings: false, filter: {}, repositories: [], pullRequests: undefined, hostUrl: undefined, selectedTabId: TabType.active, activePrBadge: undefined, draftPrBadge: undefined, settings: undefined };
     this.filter.subscribe(() => this.setState({ filter: this.filter.getState() }), FILTER_CHANGE_EVENT);
   }
 
   componentDidMount() {
     this.initialize();
+  }
+
+  closeSettings = () => {
+    this.setState({ showSettings: false});
   }
 
   render() {
@@ -75,6 +74,7 @@ export class App extends React.Component<{}, AppState> {
         <Header title="All Repositories"
           titleSize={TitleSize.Large}
           commandBarItems={[]} />
+          
         <TabBar selectedTabId={this.state.selectedTabId} onSelectedTabChanged={this.onSelectedTabChanged} renderAdditionalContent={this.renderTabBarCommands}>
           <Tab id={TabType.active} name="Active Pull Requests" badgeCount={this.state.activePrBadge} />
           <Tab id={TabType.drafts} name="My Drafts" badgeCount={this.state.draftPrBadge} />
@@ -98,9 +98,10 @@ export class App extends React.Component<{}, AppState> {
           </div>
         </ConditionalChildren>
         <ConditionalChildren renderChildren={this.state.showSettings}>
-          <SettingsPanel />
+          <SettingsPanel settings={this.state.settings} dataManager={this.dataManager} closeSettings={this.closeSettings} projectName={this.projectName} />
         </ConditionalChildren>
-        {this.renderTabContents()}
+          {this.renderTabContents()}
+        
       </Page>
     </Surface>);
   }
@@ -111,6 +112,12 @@ export class App extends React.Component<{}, AppState> {
     this.userContext = SDK.getUser();
     const projectService = await SDK.getService<IProjectPageService>(CommonServiceIds.ProjectPageService);
     const project = await projectService.getProject();
+    const accessToken = await SDK.getAccessToken();
+    const extDataService = await SDK.getService<IExtensionDataService>(CommonServiceIds.ExtensionDataService);
+    this.dataManager = await extDataService.getExtensionDataManager(SDK.getExtensionContext().id, accessToken);
+    this.projectName = project.name;
+    const settings = await this.getCurrentSettings(this.projectName);
+
     if (project) {
       const builds = await this.buildClient.getBuilds(project.name, null, null, null, null, null, null, BuildReason.PullRequest);
       let pullRequests = (await this.gitClient.getPullRequestsByProject(project.name, this.searchFilter))
@@ -160,11 +167,32 @@ export class App extends React.Component<{}, AppState> {
         hostUrl: `https://dev.azure.com/${encodeURIComponent(hostContext.name)}/${encodeURIComponent(project.name)}`,
         pullRequests: pullRequests.sort(this.defaultSortPrs),
         activePrBadge: pullRequests.filter(x => !x.isDraft).length,
-        draftPrBadge: pullRequests.filter(x => x.isDraft && x.author.id === this.userContext.id).length
+        draftPrBadge: pullRequests.filter(x => x.isDraft && x.author.id === this.userContext.id).length,
+        settings: settings
       });
       const repos = await this.gitClient.getRepositories(project.name);
       this.setState({ repositories: repos });
     }
+
+    this.isReady = true;
+  }
+
+  private async getCurrentSettings(projectName: string): Promise<Settings> {
+    var settingsResult = await this.dataManager.getValue<string>(`${projectName}-extension-settings`, { scopeType: "User" });
+    if(settingsResult && settingsResult !== "") {
+      return JSON.parse(settingsResult);
+    }
+    
+    return {
+      AuthorColumnEnabled: true,
+      BuildStatusColumnEnabled: true,
+      CommentsColumnEnabled: true,
+      CreatedColumnEnabled: true,
+      DetailsColumnEnabled: true,
+      MyVoteColumnEnabled: true,
+      RepositoryColumnEnabled: true,
+      ReviewersColumnEnabled: true
+    };
   }
 
   private renderTabBarCommands = () => {
@@ -172,9 +200,10 @@ export class App extends React.Component<{}, AppState> {
       {
         subtle: true,
         id: "settings",
-
         onActivate: () => {
-            this.setState({ showSettings: !this.state.showSettings});
+            if(this.isReady) {
+              this.setState({ showSettings: true});
+            }
         },
         tooltipProps: { text: "Extension Settings" },
         disabled: false,
@@ -186,7 +215,9 @@ export class App extends React.Component<{}, AppState> {
   }
 
   private onSelectedTabChanged = (newTabId: string) => {
-    this.setState({ selectedTabId: newTabId });
+    if(this.isReady) {
+      this.setState({ selectedTabId: newTabId });
+    }
   }
 
   private renderTabContents() {
@@ -194,17 +225,13 @@ export class App extends React.Component<{}, AppState> {
       return <section className="page-content page-content-top">
         <PullRequestTable pullRequests={
           this.state.pullRequests ? this.state.pullRequests.filter(x => !x.isDraft) : undefined
-        } hostUrl={this.state.hostUrl} filter={this.state.filter} />
+        } hostUrl={this.state.hostUrl} filter={this.state.filter} settings={this.state.settings} />
       </section>;
     } else if (this.state.selectedTabId === TabType.drafts) {
       return <section className="page-content page-content-top">
         <PullRequestTable pullRequests={
           this.state.pullRequests ? this.state.pullRequests.filter(x => x.isDraft && x.author.id === this.userContext.id) : undefined
-        } hostUrl={this.state.hostUrl} filter={this.state.filter} />
-      </section>;
-    } else if (this.state.selectedTabId === TabType.settings) {
-      return <section className="page-content page-content-top">
-        <SettingsTab />
+        } hostUrl={this.state.hostUrl} filter={this.state.filter} settings={this.state.settings} />
       </section>;
     }
     return <div></div>;
